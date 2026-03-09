@@ -10,9 +10,7 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Fix: create stub libcuda.so.1 so the linker is satisfied at build time.
-# The real libcuda.so.1 from the host driver is injected at runtime by
-# the NVIDIA container runtime — the stub is only needed to complete linking.
+# Add stub only for linking
 RUN ln -s /usr/local/cuda/lib64/stubs/libcuda.so \
           /usr/local/cuda/lib64/stubs/libcuda.so.1 && \
     echo "/usr/local/cuda/lib64/stubs" >> /etc/ld.so.conf.d/cuda-stubs.conf && \
@@ -26,6 +24,11 @@ RUN cmake -B build \
     -DCMAKE_CUDA_ARCHITECTURES="52" \
     -DCMAKE_BUILD_TYPE=Release && \
     cmake --build build --config Release -j$(nproc) --target llama-server
+
+# CRITICAL: remove stub config so runtime uses real driver from host
+RUN rm /etc/ld.so.conf.d/cuda-stubs.conf && \
+    rm /usr/local/cuda/lib64/stubs/libcuda.so.1 && \
+    ldconfig
 
 EXPOSE 8080
 ENTRYPOINT ["/app/llama.cpp/build/bin/llama-server"]
