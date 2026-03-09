@@ -10,10 +10,17 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+# Fix: create stub libcuda.so.1 so the linker is satisfied at build time.
+# The real libcuda.so.1 from the host driver is injected at runtime by
+# the NVIDIA container runtime — the stub is only needed to complete linking.
+RUN ln -s /usr/local/cuda/lib64/stubs/libcuda.so \
+          /usr/local/cuda/lib64/stubs/libcuda.so.1 && \
+    echo "/usr/local/cuda/lib64/stubs" >> /etc/ld.so.conf.d/cuda-stubs.conf && \
+    ldconfig
+
 RUN git clone https://github.com/ggml-org/llama.cpp /app/llama.cpp
 WORKDIR /app/llama.cpp
 
-# sm_52 = M40 Maxwell — mandatory, do not remove
 RUN cmake -B build \
     -DGGML_CUDA=ON \
     -DCMAKE_CUDA_ARCHITECTURES="52" \
