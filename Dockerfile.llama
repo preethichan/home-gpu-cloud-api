@@ -1,0 +1,24 @@
+FROM nvidia/cuda:12.2.0-devel-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    cmake \
+    git \
+    libcurl4-openssl-dev \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN git clone https://github.com/ggml-org/llama.cpp /app/llama.cpp
+WORKDIR /app/llama.cpp
+
+# sm_52 = M40 Maxwell — mandatory, do not remove
+RUN cmake -B build \
+    -DGGML_CUDA=ON \
+    -DCMAKE_CUDA_ARCHITECTURES="52" \
+    -DCMAKE_BUILD_TYPE=Release && \
+    cmake --build build --config Release -j$(nproc) --target llama-server
+
+EXPOSE 8080
+ENTRYPOINT ["/app/llama.cpp/build/bin/llama-server"]

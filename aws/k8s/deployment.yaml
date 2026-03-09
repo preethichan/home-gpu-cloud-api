@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llm-api
+  namespace: llm
+  labels:
+    app: llm-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: llm-api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1    # always keep 1 pod alive during update
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: llm-api
+    spec:
+      # Spread pods across different nodes for fault tolerance
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: llm-api
+
+      containers:
+        - name: api
+          image: ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/llm-api:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 9000
+          env:
+            - name: LLAMA_SERVER_URL
+              valueFrom:
+                secretKeyRef:
+                  name: llm-secrets
+                  key: llama-url
+            - name: API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: llm-secrets
+                  key: api-key
+            - name: MODEL_ID
+              value: "qwen2.5-7b-instruct"
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 9000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+            # Pod stops receiving traffic if /health fails 3 times
+            # This protects clients when your home PC goes offline
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 9000
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            failureThreshold: 5
+            # Pod restarts if it becomes permanently stuck
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: llm-api-hpa
+  namespace: llm
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: llm-api
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70

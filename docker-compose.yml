@@ -1,0 +1,47 @@
+version: "3.9"
+
+services:
+
+  llama-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.llama
+    container_name: llama-server
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=0
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    ports:
+      - "8080:8080"      # expose locally for debugging only
+    volumes:
+      - /data/models:/models   # put your .gguf file here on the host
+    command: >
+      --model /models/qwen2.5-7b-instruct-q4_k_m.gguf
+      --host 0.0.0.0
+      --port 8080
+      --n-gpu-layers 999
+      --ctx-size 4096
+      --parallel 8
+      --cont-batching
+      --flash-attn
+      --cache-type-k q8_0
+      --cache-type-v q8_0
+      --threads 4
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s    # model load takes time
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
+    command: tunnel --config /etc/cloudflared/config.yml run
+    volumes:
+      - ./cloudflared:/etc/cloudflared
+    restart: unless-stopped
+    depends_on:
+      llama-server:
+        condition: service_healthy   # only connect tunnel after model is loaded

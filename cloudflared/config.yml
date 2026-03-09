@@ -1,0 +1,14 @@
+# Replace TUNNEL_ID with the ID printed by: cloudflared tunnel create llama-tunnel
+tunnel: TUNNEL_ID
+credentials-file: /etc/cloudflared/TUNNEL_ID.json
+
+ingress:
+  - service: http://llama-server:8080
+    originRequest:
+      noTLSVerify: false
+      connectTimeout: 30s
+      tcpKeepAlive: 30s
+      keepAliveTimeout: 90s
+      keepAliveConnections: 10
+      # Increase for long streaming responses
+      proxyReadTimeout: 600s
